@@ -1,0 +1,15 @@
+# Vision-MVP — Dependencias Python
+# Instalar con: pip install -r requirements.txt
+
+# Visión Artificial
+opencv-python>=4.8.0
+mediapipe>=0.10.0
+numpy>=1.24.0
+
+# Dashboard (HMI)
+streamlit>=1.30.0
+streamlit-autorefresh>=1.0.1
+
+# Nota: sqlite3 y winsound son parte de la stdlib de Python/Windows.
+# pyserial se agregará en Fase 2 para comunicación con Arduino:
+# pyserial>=3.5
