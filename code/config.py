@@ -19,6 +19,15 @@ CAM_BANDEJAS_INDEX = 0      # Cámara para inspección de bandejas
 CAM_POSTURA_INDEX = 1       # Cámara para monitoreo ergonómico
 
 # =============================================
+# Worker de Bandejas (Visión Clásica + YOLO)
+# =============================================
+# Configuración YOLO
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BANDEJA_YOLO_MODEL = os.path.join(BASE_DIR, 'assets', 'yolov8n.pt')
+BANDEJA_YOLO_CLASS = 45 # 45 es 'bowl' en COCO (Proxy para la bandeja real detectada en p1.jpeg)
+BANDEJA_MAX_ANGLE_TOLERANCE = 5.0 # Grados de tolerancia máxima de rectitud
+
+# =============================================
 # General
 # =============================================
 DEBUG_MODE = True          # Si es True, usa cv2.imshow nativo (no recomendado para dashboard)
@@ -55,10 +64,21 @@ BANDEJA_THRESH_C = 2
 # =============================================
 # Worker Postura — MediaPipe Pose
 # =============================================
-POSTURA_FPS_DELAY = 0.0015                  # Sin retraso, procesa a máxima velocidad
+POSTURA_FPS_DELAY = 0.025                  # Sin retraso, procesa a máxima velocidad
 POSTURA_RESOLUTION = (1280, 720)          # Resolución HD (720p) para mayor nitidez
-POSTURA_MIN_DETECTION_CONFIDENCE = 0.7   # 70% de seguridad para detectar la postura
-POSTURA_MIN_TRACKING_CONFIDENCE = 0.7    # 70% de seguridad para seguir los movimientos
+POSTURA_MIN_DETECTION_CONFIDENCE = 0.70   # 70% de seguridad para detectar la postura
+POSTURA_MIN_TRACKING_CONFIDENCE = 0.70    # 70% de seguridad para seguir los movimientos
+POSTURA_MODEL_ASSET = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets', 'pose_landmarker_heavy.task') # Modelo Heavy de MediaPipe
+
+# ROI de Postura: Region of Interest por defecto (x, y, ancho, alto)
+# Centrado para una resolución de 1280x720 con tamaño 640x640.
+POSTURA_ROI = (320, 40, 640, 640)
+
+# Configuración visual del ROI
+POSTURA_DRAW_ROI = True
+POSTURA_ROI_COLOR = (0, 255, 255)  # BGR (Amarillo por defecto)
+POSTURA_ROI_THICKNESS = 2
+POSTURA_ROI_TEXT = "ROI (Zona de Proceso)"
 
 # Umbrales ergonómicos (PARAMETRIZABLES)
 # Ángulo de espalda: medido entre SHOULDER-HIP-KNEE
@@ -73,8 +93,9 @@ MAX_NECK_FLEXION = 30.0         # Grados de flexión cervical máxima
 POSTURA_FRAMES_ALERTA = 10     # ~1.5 segundos a 7 FPS
 
 # =============================================
-# Resiliencia (Gestión de Memoria)
+# Configuración Global del Sistema
 # =============================================
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DEQUE_MAXLEN = 100              # Tamaño máximo de historiales en memoria
 
 # =============================================

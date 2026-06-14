@@ -103,14 +103,14 @@ st.markdown('<div class="main-header">🏭 VISION-MVP · Monitor de Producción<
 
 
 # =============================================
-# Sidebar: Configuración de Cámaras
+# Sidebar: Configuración de Cámaras y ROI
 # =============================================
 with st.sidebar:
     st.header("⚙️ Configuración")
-    st.markdown("Ajusta los puertos USB de las cámaras.")
     
-    config_actual = db.obtener_config_camaras()
+    config_actual = db.obtener_config_sistema()
     
+    st.subheader("Puertos de Cámara")
     with st.form("form_config_camaras"):
         idx_bandejas = st.number_input(
             "Cámara de Bandejas (Index)", 
@@ -125,11 +125,25 @@ with st.sidebar:
             step=1
         )
         
-        submit = st.form_submit_button("Guardar Configuración")
-        if submit:
+        submit_cam = st.form_submit_button("Guardar Cámaras")
+        if submit_cam:
             db.actualizar_config_camaras(idx_bandejas, idx_postura)
-            st.success("¡Configuración guardada!")
-            st.warning("⚠️ Debes reiniciar los workers (start_vision_mvp.bat) para aplicar los cambios.")
+            st.success("Cámaras actualizadas!")
+            st.warning("⚠️ Debes reiniciar los workers.")
+
+    st.subheader("ROI Postura")
+    st.markdown("Recorte de imagen para salvar CPU.")
+    with st.form("form_config_roi"):
+        rx = st.number_input("Posición X", min_value=0, max_value=2000, value=config_actual['postura_roi_x'], step=10)
+        ry = st.number_input("Posición Y", min_value=0, max_value=2000, value=config_actual['postura_roi_y'], step=10)
+        rw = st.number_input("Ancho", min_value=100, max_value=2000, value=config_actual['postura_roi_w'], step=10)
+        rh = st.number_input("Alto", min_value=100, max_value=2000, value=config_actual['postura_roi_h'], step=10)
+        
+        submit_roi = st.form_submit_button("Guardar ROI")
+        if submit_roi:
+            db.actualizar_config_roi_postura(rx, ry, rw, rh)
+            st.success("ROI actualizado!")
+            # El worker de postura lo leerá en su próximo frame, no necesita reinicio.
 
 # =============================================
 # Estado del Sistema (Workers)

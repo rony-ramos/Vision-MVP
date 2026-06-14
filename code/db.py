@@ -59,6 +59,10 @@ def init_db() -> None:
             -- Valores por defecto basados en config.py si no existen
             INSERT OR IGNORE INTO configuracion (clave, valor) VALUES ('cam_bandejas_index', '?');
             INSERT OR IGNORE INTO configuracion (clave, valor) VALUES ('cam_postura_index', '?');
+            INSERT OR IGNORE INTO configuracion (clave, valor) VALUES ('postura_roi_x', '?');
+            INSERT OR IGNORE INTO configuracion (clave, valor) VALUES ('postura_roi_y', '?');
+            INSERT OR IGNORE INTO configuracion (clave, valor) VALUES ('postura_roi_w', '?');
+            INSERT OR IGNORE INTO configuracion (clave, valor) VALUES ('postura_roi_h', '?');
         """)
         # Reemplazamos los parámetros de INSERT OR IGNORE
         conn.execute(
@@ -69,6 +73,12 @@ def init_db() -> None:
             "UPDATE configuracion SET valor = ? WHERE clave = 'cam_postura_index' AND valor = '?'",
             (str(config.CAM_POSTURA_INDEX),)
         )
+        # Valores ROI
+        rx, ry, rw, rh = config.POSTURA_ROI
+        conn.execute("UPDATE configuracion SET valor = ? WHERE clave = 'postura_roi_x' AND valor = '?'", (str(rx),))
+        conn.execute("UPDATE configuracion SET valor = ? WHERE clave = 'postura_roi_y' AND valor = '?'", (str(ry),))
+        conn.execute("UPDATE configuracion SET valor = ? WHERE clave = 'postura_roi_w' AND valor = '?'", (str(rw),))
+        conn.execute("UPDATE configuracion SET valor = ? WHERE clave = 'postura_roi_h' AND valor = '?'", (str(rh),))
         conn.commit()
     finally:
         conn.close()
@@ -232,21 +242,23 @@ def obtener_estado_workers() -> list:
         conn.close()
 
 
-def obtener_config_camaras() -> dict:
+def obtener_config_sistema() -> dict:
     """
-    Obtiene los índices de las cámaras desde la base de datos.
-    Returns: dict con 'cam_bandejas_index' y 'cam_postura_index' (enteros).
+    Obtiene toda la configuración (cámaras, roi) desde la base de datos.
     """
     conn = get_connection()
     try:
-        cursor = conn.execute(
-            "SELECT clave, valor FROM configuracion WHERE clave IN ('cam_bandejas_index', 'cam_postura_index')"
-        )
+        cursor = conn.execute("SELECT clave, valor FROM configuracion")
         filas = cursor.fetchall()
-        # Valores por defecto en caso de algún error extraño
+        
+        rx, ry, rw, rh = config.POSTURA_ROI
         configs = {
             'cam_bandejas_index': config.CAM_BANDEJAS_INDEX,
-            'cam_postura_index': config.CAM_POSTURA_INDEX
+            'cam_postura_index': config.CAM_POSTURA_INDEX,
+            'postura_roi_x': rx,
+            'postura_roi_y': ry,
+            'postura_roi_w': rw,
+            'postura_roi_h': rh
         }
         for row in filas:
             try:
@@ -262,14 +274,20 @@ def actualizar_config_camaras(idx_bandejas: int, idx_postura: int) -> None:
     """Actualiza los índices de las cámaras en la base de datos."""
     conn = get_connection()
     try:
-        conn.execute(
-            "UPDATE configuracion SET valor = ? WHERE clave = 'cam_bandejas_index'",
-            (str(idx_bandejas),)
-        )
-        conn.execute(
-            "UPDATE configuracion SET valor = ? WHERE clave = 'cam_postura_index'",
-            (str(idx_postura),)
-        )
+        conn.execute("UPDATE configuracion SET valor = ? WHERE clave = 'cam_bandejas_index'", (str(idx_bandejas),))
+        conn.execute("UPDATE configuracion SET valor = ? WHERE clave = 'cam_postura_index'", (str(idx_postura),))
+        conn.commit()
+    finally:
+        conn.close()
+
+def actualizar_config_roi_postura(x: int, y: int, w: int, h: int) -> None:
+    """Actualiza el ROI de postura en la base de datos."""
+    conn = get_connection()
+    try:
+        conn.execute("UPDATE configuracion SET valor = ? WHERE clave = 'postura_roi_x'", (str(x),))
+        conn.execute("UPDATE configuracion SET valor = ? WHERE clave = 'postura_roi_y'", (str(y),))
+        conn.execute("UPDATE configuracion SET valor = ? WHERE clave = 'postura_roi_w'", (str(w),))
+        conn.execute("UPDATE configuracion SET valor = ? WHERE clave = 'postura_roi_h'", (str(h),))
         conn.commit()
     finally:
         conn.close()

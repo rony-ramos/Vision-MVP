@@ -50,7 +50,7 @@ class MJPEGHandler(BaseHTTPRequestHandler):
                     
                     # Evitar saturar la CPU
                     time.sleep(0.05)
-            except Exception as e:
+            except Exception:
                 # Se lanza al desconectar el cliente web
                 pass
         else:

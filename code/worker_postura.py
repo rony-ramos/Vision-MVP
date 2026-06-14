@@ -24,6 +24,9 @@ import collections
 import cv2
 import numpy as np
 import mediapipe as mp
+from mediapipe.tasks import python as mp_python
+from mediapipe.tasks.python import vision
+from mediapipe.framework.formats import landmark_pb2
 
 import config
 import db
@@ -71,11 +74,12 @@ def obtener_landmark(landmarks, idx, w: int, h: int) -> tuple | None:
     Returns:
         (x_px, y_px, visibility) o None si visibilidad es muy baja.
     """
-    lm = landmarks[idx]
+    # En la nueva API, idx puede ser un Enum, usamos .value si es necesario
+    indice = idx.value if hasattr(idx, 'value') else idx
+    lm = landmarks[indice]
     if lm.visibility < 0.3:
         return None
     return (int(lm.x * w), int(lm.y * h), lm.visibility)
-
 
 def evaluar_postura(landmarks, frame_shape: tuple) -> dict:
     """
@@ -144,9 +148,16 @@ def evaluar_postura(landmarks, frame_shape: tuple) -> dict:
 def dibujar_overlay(frame: np.ndarray, results, evaluacion: dict) -> np.ndarray:
     """Dibuja la pose detectada y el estado ergonómico."""
     if results.pose_landmarks:
+        # Convertimos los landmarks de la nueva API a Protobuf para usar draw_landmarks
+        pose_landmarks_proto = landmark_pb2.NormalizedLandmarkList()
+        pose_landmarks_proto.landmark.extend([
+            landmark_pb2.NormalizedLandmark(x=lm.x, y=lm.y, z=lm.z, visibility=lm.visibility)
+            for lm in results.pose_landmarks[0]
+        ])
+        
         mp_drawing.draw_landmarks(
             frame,
-            results.pose_landmarks,
+            pose_landmarks_proto,
             mp_pose.POSE_CONNECTIONS,
             landmark_drawing_spec=mp_drawing_styles.get_default_pose_landmarks_style()
         )
@@ -172,24 +183,31 @@ class WorkerPostura:
     """Clase principal para encapsular el estado y ejecución del monitoreo ergonómico."""
     
     def __init__(self):
+        self.actuador = crear_actuador()
         self.frames_en_alerta = 0
         self.ultimo_estado_registrado = None
+        self.historial = collections.deque(maxlen=100)
         self.frame_count = 0
-        self.historial = collections.deque(maxlen=config.DEQUE_MAXLEN)
-        self.actuador = crear_actuador()
         self.heartbeat_interval = 20
-        self.pose = mp_pose.Pose(
-            min_detection_confidence=config.POSTURA_MIN_DETECTION_CONFIDENCE,
+        
+        # Inicialización de MediaPipe Tasks API (Modelo Heavy)
+        base_options = mp_python.BaseOptions(model_asset_path=config.POSTURA_MODEL_ASSET)
+        options = vision.PoseLandmarkerOptions(
+            base_options=base_options,
+            running_mode=vision.RunningMode.VIDEO,
+            min_pose_detection_confidence=config.POSTURA_MIN_DETECTION_CONFIDENCE,
+            min_pose_presence_confidence=config.POSTURA_MIN_TRACKING_CONFIDENCE,
             min_tracking_confidence=config.POSTURA_MIN_TRACKING_CONFIDENCE,
-            model_complexity=0
         )
+        self.landmarker = vision.PoseLandmarker.create_from_options(options)
+        
         self.cap = None
         self.streamer = VideoStreamingServer(config.STREAM_PORT_POSTURA)
 
     def inicializar_camara(self):
         """Prepara la captura de video."""
         # Leer configuración dinámica desde la DB
-        configs = db.obtener_config_camaras()
+        configs = db.obtener_config_sistema()
         idx = configs.get('cam_postura_index', config.CAM_POSTURA_INDEX)
 
         self.cap = cv2.VideoCapture(idx)
@@ -225,10 +243,27 @@ class WorkerPostura:
                 logger.info("Postura en estado OK.")
             self.ultimo_estado_registrado = estado_consolidado
 
-    def _renderizar(self, frame, results, evaluacion) -> bool:
+    def _renderizar(self, frame, roi, results, evaluacion) -> bool:
         """Visualiza los resultados en modo debug o aplica delay intencional."""
-        # Siempre dibujamos el overlay y mandamos el frame al streamer
-        frame_con_overlay = dibujar_overlay(frame.copy(), results, evaluacion)
+        # Copiamos el frame completo
+        frame_con_overlay = frame.copy()
+        
+        # Extraemos la vista del ROI sobre la copia
+        rx, ry, rw, rh = roi
+        frame_crop_overlay = frame_con_overlay[ry:ry+rh, rx:rx+rw]
+        
+        # Dibujamos sobre el crop (esto modifica frame_con_overlay)
+        dibujar_overlay(frame_crop_overlay, results, evaluacion)
+        
+        # Dibujamos el rectángulo del ROI en el frame completo si está habilitado
+        if getattr(config, 'POSTURA_DRAW_ROI', True):
+            color = getattr(config, 'POSTURA_ROI_COLOR', (0, 255, 255))
+            thickness = getattr(config, 'POSTURA_ROI_THICKNESS', 2)
+            texto = getattr(config, 'POSTURA_ROI_TEXT', "ROI")
+            
+            cv2.rectangle(frame_con_overlay, (rx, ry), (rx+rw, ry+rh), color, thickness)
+            cv2.putText(frame_con_overlay, texto, (rx, ry - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, thickness)
+
         self.streamer.set_frame(frame_con_overlay)
 
         if config.DEBUG_MODE:
@@ -241,17 +276,32 @@ class WorkerPostura:
             time.sleep(config.POSTURA_FPS_DELAY)
         return True
 
-    def procesar_frame(self, frame) -> bool:
+    def procesar_frame(self, frame, roi) -> bool:
         """Procesa un frame individual de cámara."""
         self.frame_count += 1
         
-        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        frame_rgb.flags.writeable = False
-        results = self.pose.process(frame_rgb)
-        frame_rgb.flags.writeable = True
+        rx, ry, rw, rh = roi
+        h_f, w_f = frame.shape[:2]
+        
+        # Validación de límites para evitar crash si el ROI es mayor a la cámara
+        rx = max(0, min(rx, w_f - 1))
+        ry = max(0, min(ry, h_f - 1))
+        rw = max(1, min(rw, w_f - rx))
+        rh = max(1, min(rh, h_f - ry))
+        roi_validado = (rx, ry, rw, rh)
+        
+        # Recorte de la región de interés (ROI)
+        frame_crop = frame[ry:ry+rh, rx:rx+rw]
+        
+        frame_rgb = cv2.cvtColor(frame_crop, cv2.COLOR_BGR2RGB)
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame_rgb)
+        timestamp_ms = int(time.time() * 1000)
+        
+        results = self.landmarker.detect_for_video(mp_image, timestamp_ms)
 
         if results.pose_landmarks:
-            evaluacion = evaluar_postura(results.pose_landmarks.landmark, frame.shape)
+            # Evaluamos la primera pose detectada
+            evaluacion = evaluar_postura(results.pose_landmarks[0], frame_crop.shape)
         else:
             evaluacion = {
                 'alerta': False,
@@ -266,7 +316,7 @@ class WorkerPostura:
         if self.frame_count % self.heartbeat_interval == 0:
             db.actualizar_heartbeat("worker_postura")
 
-        return self._renderizar(frame, results, evaluacion)
+        return self._renderizar(frame, roi_validado, results, evaluacion)
 
     def run_loop(self):
         """Bucle infinito de procesamiento de video."""
@@ -277,8 +327,17 @@ class WorkerPostura:
                     logger.warning("Frame no capturado, reintentando...")
                     time.sleep(0.5)
                     continue
+                
+                # Fetch de configuración en tiempo real (ligero en SQLite)
+                configs = db.obtener_config_sistema()
+                roi = (
+                    configs.get('postura_roi_x', config.POSTURA_ROI[0]),
+                    configs.get('postura_roi_y', config.POSTURA_ROI[1]),
+                    configs.get('postura_roi_w', config.POSTURA_ROI[2]),
+                    configs.get('postura_roi_h', config.POSTURA_ROI[3])
+                )
 
-                if not self.procesar_frame(frame):
+                if not self.procesar_frame(frame, roi):
                     break
         except KeyboardInterrupt:
             logger.info("Worker detenido por Ctrl+C")
@@ -289,7 +348,8 @@ class WorkerPostura:
             if self.cap:
                 self.cap.release()
             cv2.destroyAllWindows()
-            self.pose.close()
+            if hasattr(self, 'landmarker'):
+                self.landmarker.close()
             self.streamer.stop()
             self.actuador.cleanup()
             logger.info("Recursos liberados. Worker finalizado.")
@@ -299,7 +359,7 @@ def run():
     """Punto de entrada."""
     logger.info("Iniciando Worker de Postura Ergonómica...")
     db.init_db()
-    configs = db.obtener_config_camaras()
+    configs = db.obtener_config_sistema()
     idx = configs.get('cam_postura_index', config.CAM_POSTURA_INDEX)
 
     logger.info(f"Cámara: index={idx}")
