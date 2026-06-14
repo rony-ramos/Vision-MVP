@@ -15,9 +15,9 @@ import config
 import db
 
 
-# ─────────────────────────────────────────────
+# =============================================
 # Configuración de página
-# ─────────────────────────────────────────────
+# =============================================
 st.set_page_config(
     page_title="Vision-MVP · Monitor de Producción",
     page_icon="🏭",
@@ -32,9 +32,9 @@ st_autorefresh(interval=config.DASHBOARD_REFRESH_MS, key="data_refresh")
 db.init_db()
 
 
-# ─────────────────────────────────────────────
+# =============================================
 # CSS personalizado
-# ─────────────────────────────────────────────
+# =============================================
 st.markdown("""
 <style>
     /* Header */
@@ -95,16 +95,16 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-# ─────────────────────────────────────────────
+# =============================================
 # Header
-# ─────────────────────────────────────────────
+# =============================================
 st.markdown('<div class="main-header">🏭 VISION-MVP · Monitor de Producción</div>',
             unsafe_allow_html=True)
 
 
-# ─────────────────────────────────────────────
+# =============================================
 # Estado del Sistema (Workers)
-# ─────────────────────────────────────────────
+# =============================================
 workers = db.obtener_estado_workers()
 stats = db.obtener_estadisticas()
 
@@ -195,9 +195,9 @@ with col_status:
         )
 
 
-# ─────────────────────────────────────────────
+# =============================================
 # Tablas de Eventos Recientes
-# ─────────────────────────────────────────────
+# =============================================
 st.markdown("---")
 
 col_calidad, col_postura = st.columns(2)
@@ -263,9 +263,9 @@ with col_postura:
         st.info("No hay eventos de postura registrados aún.")
 
 
-# ─────────────────────────────────────────────
+# =============================================
 # Footer
-# ─────────────────────────────────────────────
+# =============================================
 st.markdown("---")
 st.markdown(
     f"<small>🔄 Auto-refresh: {config.DASHBOARD_REFRESH_MS/1000:.0f}s "

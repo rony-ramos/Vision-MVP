@@ -121,9 +121,9 @@ class ArduinoActuador(AbstractActuador):
             logger.info("[ARDUINO] Conexión serial cerrada")
 
 
-# ─────────────────────────────────────────────
+# =============================================
 # Factory
-# ─────────────────────────────────────────────
+# =============================================
 
 def crear_actuador(modo: str = None) -> AbstractActuador:
     """

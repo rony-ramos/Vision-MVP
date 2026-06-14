@@ -56,9 +56,9 @@ def init_db() -> None:
         conn.close()
 
 
-# ─────────────────────────────────────────────
+# =============================================
 # Escritura (usado por workers)
-# ─────────────────────────────────────────────
+# =============================================
 
 def insertar_evento_calidad(resultado: str, area: float = None,
                             detalle: str = None) -> None:
@@ -125,9 +125,9 @@ def actualizar_heartbeat(worker_name: str) -> None:
         conn.close()
 
 
-# ─────────────────────────────────────────────
+# =============================================
 # Lectura (usado por dashboard)
-# ─────────────────────────────────────────────
+# =============================================
 
 def obtener_ultimos_eventos(tipo_evento: str = None, limit: int = 50) -> list:
     """

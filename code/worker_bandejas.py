@@ -20,7 +20,6 @@ import sys
 import time
 import logging
 import collections
-
 import cv2
 import numpy as np
 
@@ -28,9 +27,9 @@ import config
 import db
 from hal import crear_actuador
 
-# ─────────────────────────────────────────────
+# =============================================
 # Logging
-# ─────────────────────────────────────────────
+# =============================================
 logging.basicConfig(
     level=logging.INFO,
     format="[%(asctime)s] [BANDEJAS] %(levelname)s: %(message)s",
@@ -42,9 +41,6 @@ logger = logging.getLogger(__name__)
 def preprocesar_roi(frame: np.ndarray) -> tuple:
     """
     Extrae la ROI del frame y la preprocesa para detección de contornos.
-
-    Returns:
-        (roi_original, roi_procesada) — ROI en color y binarizada
     """
     x, y, w, h = config.BANDEJA_ROI
     roi = frame[y:y+h, x:x+w]
@@ -58,16 +54,12 @@ def preprocesar_roi(frame: np.ndarray) -> tuple:
         config.BANDEJA_THRESH_BLOCK_SIZE,
         config.BANDEJA_THRESH_C
     )
-
     return roi, thresh
 
 
 def detectar_bandeja(thresh: np.ndarray) -> tuple:
     """
     Encuentra el contorno principal que podría ser una bandeja.
-
-    Returns:
-        (contorno, area) o (None, 0) si no se detecta
     """
     contours, _ = cv2.findContours(
         thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
@@ -76,7 +68,6 @@ def detectar_bandeja(thresh: np.ndarray) -> tuple:
     if not contours:
         return None, 0
 
-    # Filtrar por área válida
     candidatos = [
         c for c in contours
         if config.MIN_CONTOUR_AREA <= cv2.contourArea(c) <= config.MAX_CONTOUR_AREA
@@ -85,7 +76,6 @@ def detectar_bandeja(thresh: np.ndarray) -> tuple:
     if not candidatos:
         return None, 0
 
-    # Tomar el contorno más grande como candidato principal
     mejor = max(candidatos, key=cv2.contourArea)
     return mejor, cv2.contourArea(mejor)
 
@@ -93,22 +83,12 @@ def detectar_bandeja(thresh: np.ndarray) -> tuple:
 def evaluar_posicion(contorno: np.ndarray, roi_shape: tuple) -> dict:
     """
     Evalúa si la bandeja está correctamente posicionada en la ROI.
-
-    Criterios:
-    - Cobertura: El contorno debe cubrir al menos BANDEJA_COBERTURA_MIN de la ROI
-    - Centrado: El centroide del contorno debe estar cerca del centro de la ROI
-
-    Returns:
-        dict con 'resultado', 'cobertura', 'desviacion_centro', 'detalle'
     """
     h_roi, w_roi = roi_shape[:2]
     area_roi = h_roi * w_roi
     area_contorno = cv2.contourArea(contorno)
-
-    # Cobertura
     cobertura = area_contorno / area_roi
 
-    # Centrado (centroide del contorno vs centro de la ROI)
     M = cv2.moments(contorno)
     if M["m00"] == 0:
         return {
@@ -123,7 +103,6 @@ def evaluar_posicion(contorno: np.ndarray, roi_shape: tuple) -> dict:
     centro_roi = (w_roi // 2, h_roi // 2)
     desviacion = np.sqrt((cx - centro_roi[0])**2 + (cy - centro_roi[1])**2)
 
-    # Evaluación
     posicion_ok = (
         cobertura >= config.BANDEJA_COBERTURA_MIN and
         desviacion <= config.BANDEJA_CENTRO_TOLERANCIA
@@ -131,13 +110,9 @@ def evaluar_posicion(contorno: np.ndarray, roi_shape: tuple) -> dict:
 
     detalle_parts = []
     if cobertura < config.BANDEJA_COBERTURA_MIN:
-        detalle_parts.append(
-            f"Cobertura baja: {cobertura:.1%} < {config.BANDEJA_COBERTURA_MIN:.0%}"
-        )
+        detalle_parts.append(f"Cobertura baja: {cobertura:.1%} < {config.BANDEJA_COBERTURA_MIN:.0%}")
     if desviacion > config.BANDEJA_CENTRO_TOLERANCIA:
-        detalle_parts.append(
-            f"Descentrada: {desviacion:.0f}px > {config.BANDEJA_CENTRO_TOLERANCIA}px"
-        )
+        detalle_parts.append(f"Descentrada: {desviacion:.0f}px > {config.BANDEJA_CENTRO_TOLERANCIA}px")
 
     return {
         'resultado': 'OK' if posicion_ok else 'DEFECTO',
@@ -147,139 +122,127 @@ def evaluar_posicion(contorno: np.ndarray, roi_shape: tuple) -> dict:
     }
 
 
-def dibujar_overlay(frame: np.ndarray, resultado: dict,
-                    contorno: np.ndarray, area: float) -> np.ndarray:
+def dibujar_overlay(frame: np.ndarray, resultado: dict, contorno: np.ndarray, area: float) -> np.ndarray:
     """Dibuja la ROI, contorno detectado y estado en el frame."""
     x, y, w, h = config.BANDEJA_ROI
     es_ok = resultado['resultado'] == 'OK'
     color = (0, 200, 0) if es_ok else (0, 0, 255)
 
-    # Dibujar ROI
     cv2.rectangle(frame, (x, y), (x+w, y+h), color, 2)
 
-    # Dibujar contorno detectado (offset por la posición de la ROI)
     if contorno is not None:
         contorno_offset = contorno.copy()
         contorno_offset[:, :, 0] += x
         contorno_offset[:, :, 1] += y
         cv2.drawContours(frame, [contorno_offset], -1, color, 2)
 
-    # Texto de estado
     label = f"BANDEJA: {resultado['resultado']}"
-    cv2.putText(frame, label, (x, y - 10),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+    cv2.putText(frame, label, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
 
-    # Info adicional
     info = f"Area: {area:.0f}px | Cob: {resultado['cobertura']:.0%}"
-    cv2.putText(frame, info, (x, y + h + 20),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+    cv2.putText(frame, info, (x, y + h + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
 
     return frame
 
 
+class WorkerBandejas:
+    """Clase principal para encapsular el estado y ejecución de la inspección de bandejas."""
+    
+    def __init__(self):
+        self.frame_count = 0
+        self.historial = collections.deque(maxlen=config.DEQUE_MAXLEN)
+        self.ultimo_estado_registrado = None
+        self.actuador = crear_actuador()
+        self.heartbeat_interval = 30
+        self.cap = None
+
+    def inicializar_camara(self):
+        """Prepara la captura de video."""
+        self.cap = cv2.VideoCapture(config.CAM_BANDEJAS_INDEX)
+        if not self.cap.isOpened():
+            logger.error(f"No se pudo abrir la cámara {config.CAM_BANDEJAS_INDEX}")
+            sys.exit(1)
+        logger.info("Cámara abierta. Procesando frames...")
+
+    def _gestionar_alertas(self, resultado: dict, area: float):
+        """Maneja los cambios de estado y registros en base de datos."""
+        resultado_actual = resultado['resultado']
+        if resultado_actual != self.ultimo_estado_registrado:
+            if resultado_actual == 'DEFECTO':
+                self.actuador.trigger(f"Bandeja mal posicionada: {resultado['detalle']}")
+                db.insertar_evento_calidad('DEFECTO', area, resultado['detalle'])
+                logger.warning(f"Bandeja DEFECTO: {resultado['detalle']}")
+            else:
+                db.insertar_evento_calidad('OK', area, resultado['detalle'])
+                logger.info("Bandeja OK.")
+            self.ultimo_estado_registrado = resultado_actual
+
+    def procesar_frame(self, frame) -> bool:
+        """Procesa un frame individual de cámara."""
+        self.frame_count += 1
+        roi, thresh = preprocesar_roi(frame)
+        contorno, area = detectar_bandeja(thresh)
+
+        if contorno is not None:
+            resultado = evaluar_posicion(contorno, roi.shape)
+        else:
+            resultado = {
+                'resultado': 'DEFECTO',
+                'cobertura': 0,
+                'desviacion_centro': float('inf'),
+                'detalle': 'No se detectó bandeja en la ROI'
+            }
+
+        self.historial.append(resultado['resultado'])
+        self._gestionar_alertas(resultado, area)
+
+        if self.frame_count % self.heartbeat_interval == 0:
+            db.actualizar_heartbeat("worker_bandejas")
+
+        if config.DEBUG_MODE:
+            frame = dibujar_overlay(frame, resultado, contorno, area)
+            cv2.imshow("Vision-MVP: Inspeccion de Bandejas", frame)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                logger.info("Salida solicitada por usuario (tecla 'q')")
+                return False
+
+        return True
+
+    def run_loop(self):
+        """Bucle infinito de procesamiento de video."""
+        try:
+            while True:
+                ret, frame = self.cap.read()
+                if not ret:
+                    logger.warning("Frame no capturado, reintentando...")
+                    time.sleep(0.5)
+                    continue
+
+                if not self.procesar_frame(frame):
+                    break
+        except KeyboardInterrupt:
+            logger.info("Worker detenido por Ctrl+C")
+        except Exception as e:
+            logger.exception(f"Error crítico: {e}")
+            raise
+        finally:
+            if self.cap:
+                self.cap.release()
+            cv2.destroyAllWindows()
+            self.actuador.cleanup()
+            logger.info("Recursos liberados. Worker finalizado.")
+
+
 def run():
-    """Bucle principal del worker de bandejas."""
+    """Punto de entrada."""
     logger.info("Iniciando Worker de Bandejas...")
     logger.info(f"Cámara: index={config.CAM_BANDEJAS_INDEX}")
     logger.info(f"ROI: {config.BANDEJA_ROI}")
 
-    # Inicializar DB
     db.init_db()
-
-    # Crear actuador
-    actuador = crear_actuador()
-
-    # Historial con límite de memoria
-    historial = collections.deque(maxlen=config.DEQUE_MAXLEN)
-    
-    ultimo_estado_registrado = None  # Para registrar solo los cambios de estado
-
-    # Abrir cámara
-    cap = cv2.VideoCapture(config.CAM_BANDEJAS_INDEX)
-    if not cap.isOpened():
-        logger.error(
-            f"No se pudo abrir la cámara {config.CAM_BANDEJAS_INDEX}"
-        )
-        sys.exit(1)
-
-    logger.info("Cámara abierta. Procesando frames...")
-    frame_count = 0
-    heartbeat_interval = 30  # Actualizar heartbeat cada N frames
-
-    try:
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                logger.warning("Frame no capturado, reintentando...")
-                time.sleep(0.5)
-                continue
-
-            frame_count += 1
-
-            # 1. Preprocesar ROI
-            roi, thresh = preprocesar_roi(frame)
-
-            # 2. Detectar bandeja
-            contorno, area = detectar_bandeja(thresh)
-
-            # 3. Evaluar posición
-            if contorno is not None:
-                resultado = evaluar_posicion(contorno, roi.shape)
-            else:
-                resultado = {
-                    'resultado': 'DEFECTO',
-                    'cobertura': 0,
-                    'desviacion_centro': float('inf'),
-                    'detalle': 'No se detectó bandeja en la ROI'
-                }
-
-            # 4. Registrar en historial (memoria acotada)
-            historial.append(resultado['resultado'])
-
-            # 5. Acción si hay cambio de estado
-            resultado_actual = resultado['resultado']
-            if resultado_actual != ultimo_estado_registrado:
-                if resultado_actual == 'DEFECTO':
-                    actuador.trigger(f"Bandeja mal posicionada: {resultado['detalle']}")
-                    db.insertar_evento_calidad(
-                        resultado='DEFECTO',
-                        area=area,
-                        detalle=resultado['detalle']
-                    )
-                    logger.warning(f"Bandeja DEFECTO: {resultado['detalle']}")
-                else:
-                    db.insertar_evento_calidad(
-                        resultado='OK',
-                        area=area,
-                        detalle=resultado['detalle']
-                    )
-                    logger.info("Bandeja OK.")
-                
-                ultimo_estado_registrado = resultado_actual
-
-            # 6. Heartbeat
-            if frame_count % heartbeat_interval == 0:
-                db.actualizar_heartbeat("worker_bandejas")
-
-            # 7. Visualización (Sólo en DEBUG_MODE)
-            if config.DEBUG_MODE:
-                frame = dibujar_overlay(frame, resultado, contorno, area)
-                cv2.imshow("Vision-MVP: Inspeccion de Bandejas", frame)
-                # Salir con 'q'
-                if cv2.waitKey(1) & 0xFF == ord('q'):
-                    logger.info("Salida solicitada por usuario (tecla 'q')")
-                    break
-
-    except KeyboardInterrupt:
-        logger.info("Worker detenido por Ctrl+C")
-    except Exception as e:
-        logger.error(f"Error crítico: {e}", exc_info=True)
-        raise
-    finally:
-        cap.release()
-        cv2.destroyAllWindows()
-        actuador.cleanup()
-        logger.info("Recursos liberados. Worker finalizado.")
+    worker = WorkerBandejas()
+    worker.inicializar_camara()
+    worker.run_loop()
 
 
 if __name__ == "__main__":
