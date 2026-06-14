@@ -21,7 +21,13 @@ CAM_POSTURA_INDEX = 1       # Cámara para monitoreo ergonómico
 # =============================================
 # General
 # =============================================
-DEBUG_MODE = True           # Si es True, muestra la ventana de video de la cámara en tiempo real
+DEBUG_MODE = True          # Si es True, usa cv2.imshow nativo (no recomendado para dashboard)
+
+# =============================================
+# Streaming de Video (MJPEG)
+# =============================================
+STREAM_PORT_BANDEJAS = 8001
+STREAM_PORT_POSTURA = 8002
 
 # =============================================
 # Worker Bandejas — Detección de Posición
@@ -49,10 +55,10 @@ BANDEJA_THRESH_C = 2
 # =============================================
 # Worker Postura — MediaPipe Pose
 # =============================================
-POSTURA_FPS_DELAY = 0.15                # Delay entre frames (~5-7 FPS)
-POSTURA_RESOLUTION = (640, 480)         # Resolución de captura reducida
-POSTURA_MIN_DETECTION_CONFIDENCE = 0.5
-POSTURA_MIN_TRACKING_CONFIDENCE = 0.5
+POSTURA_FPS_DELAY = 0.0015                  # Sin retraso, procesa a máxima velocidad
+POSTURA_RESOLUTION = (1280, 720)          # Resolución HD (720p) para mayor nitidez
+POSTURA_MIN_DETECTION_CONFIDENCE = 0.7   # 70% de seguridad para detectar la postura
+POSTURA_MIN_TRACKING_CONFIDENCE = 0.7    # 70% de seguridad para seguir los movimientos
 
 # Umbrales ergonómicos (PARAMETRIZABLES)
 # Ángulo de espalda: medido entre SHOULDER-HIP-KNEE

@@ -26,6 +26,7 @@ import numpy as np
 import config
 import db
 from hal import crear_actuador
+from streamer import VideoStreamingServer
 
 # =============================================
 # Logging
@@ -155,6 +156,7 @@ class WorkerBandejas:
         self.actuador = crear_actuador()
         self.heartbeat_interval = 30
         self.cap = None
+        self.streamer = VideoStreamingServer(config.STREAM_PORT_BANDEJAS)
 
     def inicializar_camara(self):
         """Prepara la captura de video."""
@@ -203,9 +205,13 @@ class WorkerBandejas:
         if self.frame_count % self.heartbeat_interval == 0:
             db.actualizar_heartbeat("worker_bandejas")
 
+        # Siempre enviamos el frame con overlay al streamer
+        frame_con_overlay = frame.copy()
+        frame_con_overlay = dibujar_overlay(frame_con_overlay, resultado, contorno, area)
+        self.streamer.set_frame(frame_con_overlay)
+
         if config.DEBUG_MODE:
-            frame = dibujar_overlay(frame, resultado, contorno, area)
-            cv2.imshow("Vision-MVP: Inspeccion de Bandejas", frame)
+            cv2.imshow("Vision-MVP: Inspeccion de Bandejas", frame_con_overlay)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 logger.info("Salida solicitada por usuario (tecla 'q')")
                 return False
@@ -233,6 +239,7 @@ class WorkerBandejas:
             if self.cap:
                 self.cap.release()
             cv2.destroyAllWindows()
+            self.streamer.stop()
             self.actuador.cleanup()
             logger.info("Recursos liberados. Worker finalizado.")
 

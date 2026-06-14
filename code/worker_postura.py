@@ -28,6 +28,7 @@ import mediapipe as mp
 import config
 import db
 from hal import crear_actuador
+from streamer import VideoStreamingServer
 
 # =============================================
 # Logging
@@ -183,6 +184,7 @@ class WorkerPostura:
             model_complexity=0
         )
         self.cap = None
+        self.streamer = VideoStreamingServer(config.STREAM_PORT_POSTURA)
 
     def inicializar_camara(self):
         """Prepara la captura de video."""
@@ -225,9 +227,12 @@ class WorkerPostura:
 
     def _renderizar(self, frame, results, evaluacion) -> bool:
         """Visualiza los resultados en modo debug o aplica delay intencional."""
+        # Siempre dibujamos el overlay y mandamos el frame al streamer
+        frame_con_overlay = dibujar_overlay(frame.copy(), results, evaluacion)
+        self.streamer.set_frame(frame_con_overlay)
+
         if config.DEBUG_MODE:
-            frame = dibujar_overlay(frame, results, evaluacion)
-            cv2.imshow("Vision-MVP: Monitoreo Ergonomico", frame)
+            cv2.imshow("Vision-MVP: Monitoreo Ergonomico", frame_con_overlay)
             delay_ms = int(config.POSTURA_FPS_DELAY * 1000)
             if cv2.waitKey(delay_ms) & 0xFF == ord('q'):
                 logger.info("Salida solicitada por usuario (tecla 'q')")
@@ -285,6 +290,7 @@ class WorkerPostura:
                 self.cap.release()
             cv2.destroyAllWindows()
             self.pose.close()
+            self.streamer.stop()
             self.actuador.cleanup()
             logger.info("Recursos liberados. Worker finalizado.")
 
