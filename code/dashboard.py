@@ -249,16 +249,16 @@ col_cam_bandejas, col_cam_postura = st.columns(2)
 with col_cam_bandejas:
     st.markdown("**Inspección de Bandejas**")
     st.markdown(
-        f'<img src="http://localhost:{config.STREAM_PORT_BANDEJAS}/stream" width="100%" '
-        'style="border-radius: 8px; border: 2px solid #ccc;">',
+        f'<img src="http://localhost:{config.STREAM_PORT_BANDEJAS}/stream" '
+        'style="width: 100%; aspect-ratio: 16/9; object-fit: contain; background-color: #000; border-radius: 8px; border: 2px solid #ccc;">',
         unsafe_allow_html=True
     )
 
 with col_cam_postura:
     st.markdown("**Monitoreo Ergonómico**")
     st.markdown(
-        f'<img src="http://localhost:{config.STREAM_PORT_POSTURA}/stream" width="100%" '
-        'style="border-radius: 8px; border: 2px solid #ccc;">',
+        f'<img src="http://localhost:{config.STREAM_PORT_POSTURA}/stream" '
+        'style="width: 100%; aspect-ratio: 16/9; object-fit: contain; background-color: #000; border-radius: 8px; border: 2px solid #ccc;">',
         unsafe_allow_html=True
     )
 

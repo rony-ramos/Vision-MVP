@@ -41,6 +41,12 @@ def preprocesar_y_detectar_contorno(roi: np.ndarray) -> tuple:
     Aplica thresholding sobre el recorte de YOLO para encontrar el contorno matemático exacto.
     """
     gris = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+    
+    # Evitar crash si el recorte es más pequeño que el kernel del Threshold
+    h_roi, w_roi = gris.shape
+    if h_roi <= config.BANDEJA_THRESH_BLOCK_SIZE or w_roi <= config.BANDEJA_THRESH_BLOCK_SIZE:
+        return None, 0
+
     blur = cv2.GaussianBlur(gris, config.BANDEJA_BLUR_KERNEL, 0)
     thresh = cv2.adaptiveThreshold(
         blur, 255,
@@ -106,10 +112,12 @@ def evaluar_geometria(contorno: np.ndarray) -> dict:
     }
 
 
-def dibujar_overlay(frame: np.ndarray, yolo_box: tuple, resultado: dict, contorno: np.ndarray) -> np.ndarray:
+def dibujar_overlay(frame: np.ndarray, yolo_box: tuple, resultado: dict, contorno: np.ndarray, debug_info: str = None) -> np.ndarray:
     """Dibuja la detección de YOLO y la matemática geométrica."""
     if yolo_box is None:
         cv2.putText(frame, "BUSCANDO BANDEJA...", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 165, 255), 2)
+        if config.DEBUG_MODE and debug_info:
+            cv2.putText(frame, f"[DEBUG] {debug_info}", (50, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 255), 2)
         return frame
 
     x1, y1, x2, y2 = yolo_box
@@ -119,6 +127,10 @@ def dibujar_overlay(frame: np.ndarray, yolo_box: tuple, resultado: dict, contorn
     # 1. Dibujar la "Búsqueda" (Caja YOLO) en Naranja
     cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 144, 30), 2)
     cv2.putText(frame, "YOLO Vision", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 144, 30), 1)
+
+    # Info de Debug
+    if config.DEBUG_MODE and debug_info:
+        cv2.putText(frame, f"[DEBUG] {debug_info}", (x1, y1 - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 255), 2)
 
     # 2. Dibujar la "Medición" (Geometría)
     if contorno is not None and resultado.get('rect'):
@@ -173,23 +185,38 @@ class WorkerBandejas:
 
     def _gestionar_alertas(self, resultado: dict, area: float):
         resultado_actual = resultado['resultado']
-        if resultado_actual != self.ultimo_estado_registrado:
-            if resultado_actual == 'DEFECTO':
-                self.actuador.trigger(f"Bandeja chueca: {resultado['detalle']}")
-                db.insertar_evento_calidad('DEFECTO', area, resultado['detalle'])
-                logger.warning(f"Calidad DEFECTO: {resultado['detalle']}")
-            else:
-                db.insertar_evento_calidad('OK', area, resultado['detalle'])
-                logger.info("Calidad OK.")
-            self.ultimo_estado_registrado = resultado_actual
+        
+        # 1. Verificar si el historial reciente está lleno de defectos (Consenso temporal)
+        consenso_defectos = self.historial.count('DEFECTO')
+        UMBRAL_CONSENSO = 3 # Exigir 3 frames seguidos de error
+        
+        # 2. Si hay error sostenido y no lo hemos registrado aún
+        if consenso_defectos >= UMBRAL_CONSENSO and self.ultimo_estado_registrado != 'DEFECTO':
+            self.actuador.trigger(f"Bandeja chueca: {resultado['detalle']}")
+            db.insertar_evento_calidad('DEFECTO', area, resultado['detalle'])
+            logger.warning(f"Calidad DEFECTO (Confirmado): {resultado['detalle']}")
+            self.ultimo_estado_registrado = 'DEFECTO'
+            
+        # 3. Si la lectura vuelve a ser perfecta, reseteamos el estado
+        elif resultado_actual == 'OK' and self.ultimo_estado_registrado != 'OK':
+            db.insertar_evento_calidad('OK', area, resultado['detalle'])
+            logger.info("Calidad OK (Restablecida).")
+            self.ultimo_estado_registrado = 'OK'
 
     def procesar_frame(self, frame) -> bool:
         self.frame_count += 1
         frame_con_overlay = frame.copy()
         
         # ETAPA 1: Búsqueda con IA (YOLO)
-        # Filtramos por la clase proxy (bajamos la confianza a 0.15 para objetos difíciles)
-        results = self.yolo_model.predict(frame, classes=[config.BANDEJA_YOLO_CLASS], conf=0.15, verbose=False)
+        if config.DEBUG_MODE:
+            # En modo debug buscamos la clase principal y otras rectangulares de prueba
+            # 63: laptop, 67: cell phone, 73: book, 68: microwave, 66: keyboard
+            clases_busqueda = [config.BANDEJA_YOLO_CLASS, 63, 67, 73, 68, 66]
+        else:
+            clases_busqueda = [config.BANDEJA_YOLO_CLASS]
+
+        # Filtramos por la(s) clase(s) proxy (bajamos la confianza a 0.15 para objetos difíciles)
+        results = self.yolo_model.predict(frame, classes=clases_busqueda, conf=0.15, verbose=False)
         
         yolo_box = None
         contorno = None
@@ -199,11 +226,24 @@ class WorkerBandejas:
             'angulo': 0,
             'detalle': 'No se detectó el objeto (YOLO)'
         }
+        debug_info = None
 
         if len(results) > 0 and len(results[0].boxes) > 0:
             # Tomamos la detección con mayor confianza
-            box = results[0].boxes[0].xyxy[0].cpu().numpy().astype(int)
+            box_obj = results[0].boxes[0]
+            box = box_obj.xyxy[0].cpu().numpy().astype(int)
             x1, y1, x2, y2 = box
+            
+            if config.DEBUG_MODE:
+                todas_detecciones = []
+                for b in results[0].boxes:
+                    c_id = int(b.cls[0].item())
+                    c_name = self.yolo_model.names[c_id]
+                    c_conf = b.conf[0].item()
+                    todas_detecciones.append(f"{c_name} {c_conf*100:.0f}%")
+                
+                # Unimos todas las detecciones separadas por comas
+                debug_info = "Detectado: " + " | ".join(todas_detecciones)
             
             # Asegurar límites dentro del frame
             h_f, w_f = frame.shape[:2]
@@ -220,11 +260,17 @@ class WorkerBandejas:
                 
                 self.historial.append(resultado['resultado'])
                 self._gestionar_alertas(resultado, area)
+        else:
+            if config.DEBUG_MODE and len(results) > 0:
+                # Mostrar qué está detectando YOLO internamente si es que no filtra nuestra clase
+                # Para hacer esto necesitaríamos correr predict sin filtro de clases, 
+                # pero como ya filtramos, solo mostrará vacío.
+                debug_info = f"Ningún objeto de clase {config.BANDEJA_YOLO_CLASS} detectado > 15%"
 
         if self.frame_count % self.heartbeat_interval == 0:
             db.actualizar_heartbeat("worker_bandejas")
 
-        frame_con_overlay = dibujar_overlay(frame_con_overlay, yolo_box, resultado, contorno)
+        frame_con_overlay = dibujar_overlay(frame_con_overlay, yolo_box, resultado, contorno, debug_info)
         self.streamer.set_frame(frame_con_overlay)
 
         if config.DEBUG_MODE:
@@ -244,6 +290,9 @@ class WorkerBandejas:
 
                 if not self.procesar_frame(frame):
                     break
+                
+                # LIMITADOR TÉRMICO OBLIGATORIO (Aprox. 2-3 FPS)
+                time.sleep(0.3) 
         except KeyboardInterrupt:
             logger.info("Worker detenido")
         except Exception as e:
