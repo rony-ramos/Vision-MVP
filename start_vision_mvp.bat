@@ -6,7 +6,7 @@ echo ============================================================
 
 REM Intenta activar el entorno virtual si existe
 if exist ".venv\Scripts\activate.bat" (
-    echo [INFO] Entorno virtual (.venv) detectado.
+    echo [INFO] Entorno virtual detectado.
     set "ACTIVATE_CMD=call .venv\Scripts\activate.bat && "
 ) else (
     echo [INFO] Entorno virtual no detectado. Usando Python global.

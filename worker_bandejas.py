@@ -191,6 +191,8 @@ def run():
 
     # Historial con límite de memoria
     historial = collections.deque(maxlen=config.DEQUE_MAXLEN)
+    
+    ultimo_estado_registrado = None  # Para registrar solo los cambios de estado
 
     # Abrir cámara
     cap = cv2.VideoCapture(config.CAM_BANDEJAS_INDEX)
@@ -234,22 +236,26 @@ def run():
             # 4. Registrar en historial (memoria acotada)
             historial.append(resultado['resultado'])
 
-            # 5. Acción si defecto
-            if resultado['resultado'] == 'DEFECTO':
-                actuador.trigger(f"Bandeja mal posicionada: {resultado['detalle']}")
-                db.insertar_evento_calidad(
-                    resultado='DEFECTO',
-                    area=area,
-                    detalle=resultado['detalle']
-                )
-            else:
-                # Registrar OK periódicamente (cada 30 frames para no saturar DB)
-                if frame_count % 30 == 0:
+            # 5. Acción si hay cambio de estado
+            resultado_actual = resultado['resultado']
+            if resultado_actual != ultimo_estado_registrado:
+                if resultado_actual == 'DEFECTO':
+                    actuador.trigger(f"Bandeja mal posicionada: {resultado['detalle']}")
+                    db.insertar_evento_calidad(
+                        resultado='DEFECTO',
+                        area=area,
+                        detalle=resultado['detalle']
+                    )
+                    logger.warning(f"Bandeja DEFECTO: {resultado['detalle']}")
+                else:
                     db.insertar_evento_calidad(
                         resultado='OK',
                         area=area,
                         detalle=resultado['detalle']
                     )
+                    logger.info("Bandeja OK.")
+                
+                ultimo_estado_registrado = resultado_actual
 
             # 6. Heartbeat
             if frame_count % heartbeat_interval == 0:

@@ -216,7 +216,7 @@ def run():
 
     # Contador de frames consecutivos en alerta
     frames_en_alerta = 0
-    alerta_registrada = False  # Evitar spam de alertas
+    ultimo_estado_registrado = None  # Evitar almacenar eventos redundantes
 
     # Abrir cámara con resolución reducida
     cap = cv2.VideoCapture(config.CAM_POSTURA_INDEX)
@@ -276,33 +276,40 @@ def run():
                 frames_en_alerta += 1
             else:
                 frames_en_alerta = 0
-                alerta_registrada = False
 
-            # 5. Acción si alerta sostenida
-            if (frames_en_alerta >= config.POSTURA_FRAMES_ALERTA
-                    and not alerta_registrada):
-                actuador.trigger(
-                    f"Postura riesgosa sostenida: {evaluacion['detalle']}"
-                )
-                db.insertar_evento_postura(
-                    alerta=True,
-                    angulo_espalda=evaluacion['angulo_espalda'],
-                    angulo_cuello=evaluacion['angulo_cuello'],
-                    detalle=evaluacion['detalle']
-                )
-                alerta_registrada = True
-                logger.warning(
-                    f"Alerta ergonómica registrada: {evaluacion['detalle']}"
-                )
+            # 5. Determinar estado consolidado
+            if frames_en_alerta >= config.POSTURA_FRAMES_ALERTA:
+                estado_consolidado = True
+            elif frames_en_alerta == 0:
+                estado_consolidado = False
+            else:
+                estado_consolidado = ultimo_estado_registrado if ultimo_estado_registrado is not None else False
 
-            # Registrar OK periódicamente
-            if frame_count % 50 == 0 and not evaluacion['alerta']:
-                db.insertar_evento_postura(
-                    alerta=False,
-                    angulo_espalda=evaluacion['angulo_espalda'],
-                    angulo_cuello=evaluacion['angulo_cuello'],
-                    detalle=evaluacion['detalle']
-                )
+            # 6. Acción si hay cambio de estado
+            if estado_consolidado != ultimo_estado_registrado:
+                if estado_consolidado:
+                    actuador.trigger(
+                        f"Postura riesgosa sostenida: {evaluacion['detalle']}"
+                    )
+                    db.insertar_evento_postura(
+                        alerta=True,
+                        angulo_espalda=evaluacion['angulo_espalda'],
+                        angulo_cuello=evaluacion['angulo_cuello'],
+                        detalle=evaluacion['detalle']
+                    )
+                    logger.warning(
+                        f"Alerta ergonómica registrada: {evaluacion['detalle']}"
+                    )
+                else:
+                    db.insertar_evento_postura(
+                        alerta=False,
+                        angulo_espalda=evaluacion['angulo_espalda'],
+                        angulo_cuello=evaluacion['angulo_cuello'],
+                        detalle='Postura correcta'
+                    )
+                    logger.info("Postura en estado OK.")
+                
+                ultimo_estado_registrado = estado_consolidado
 
             # 6. Historial (memoria acotada)
             historial.append(evaluacion['alerta'])
