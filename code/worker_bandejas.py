@@ -158,11 +158,15 @@ class WorkerBandejas:
 
     def inicializar_camara(self):
         """Prepara la captura de video."""
-        self.cap = cv2.VideoCapture(config.CAM_BANDEJAS_INDEX)
+        # Leer configuración dinámica desde la DB
+        configs = db.obtener_config_camaras()
+        idx = configs.get('cam_bandejas_index', config.CAM_BANDEJAS_INDEX)
+        
+        self.cap = cv2.VideoCapture(idx)
         if not self.cap.isOpened():
-            logger.error(f"No se pudo abrir la cámara {config.CAM_BANDEJAS_INDEX}")
+            logger.error(f"No se pudo abrir la cámara {idx}")
             sys.exit(1)
-        logger.info("Cámara abierta. Procesando frames...")
+        logger.info(f"Cámara {idx} abierta. Procesando frames...")
 
     def _gestionar_alertas(self, resultado: dict, area: float):
         """Maneja los cambios de estado y registros en base de datos."""
@@ -236,10 +240,12 @@ class WorkerBandejas:
 def run():
     """Punto de entrada."""
     logger.info("Iniciando Worker de Bandejas...")
-    logger.info(f"Cámara: index={config.CAM_BANDEJAS_INDEX}")
+    db.init_db()
+    configs = db.obtener_config_camaras()
+    idx = configs.get('cam_bandejas_index', config.CAM_BANDEJAS_INDEX)
+    logger.info(f"Cámara: index={idx}")
     logger.info(f"ROI: {config.BANDEJA_ROI}")
 
-    db.init_db()
     worker = WorkerBandejas()
     worker.inicializar_camara()
     worker.run_loop()

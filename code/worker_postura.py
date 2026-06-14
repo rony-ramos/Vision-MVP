@@ -186,14 +186,18 @@ class WorkerPostura:
 
     def inicializar_camara(self):
         """Prepara la captura de video."""
-        self.cap = cv2.VideoCapture(config.CAM_POSTURA_INDEX)
+        # Leer configuración dinámica desde la DB
+        configs = db.obtener_config_camaras()
+        idx = configs.get('cam_postura_index', config.CAM_POSTURA_INDEX)
+
+        self.cap = cv2.VideoCapture(idx)
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, config.POSTURA_RESOLUTION[0])
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, config.POSTURA_RESOLUTION[1])
 
         if not self.cap.isOpened():
-            logger.error(f"No se pudo abrir la cámara {config.CAM_POSTURA_INDEX}")
+            logger.error(f"No se pudo abrir la cámara {idx}")
             sys.exit(1)
-        logger.info("Cámara abierta. Procesando poses...")
+        logger.info(f"Cámara {idx} abierta. Procesando poses...")
 
     def _gestionar_alertas(self, evaluacion: dict):
         """Maneja los cambios de estado y registros en base de datos."""
@@ -288,12 +292,15 @@ class WorkerPostura:
 def run():
     """Punto de entrada."""
     logger.info("Iniciando Worker de Postura Ergonómica...")
-    logger.info(f"Cámara: index={config.CAM_POSTURA_INDEX}")
+    db.init_db()
+    configs = db.obtener_config_camaras()
+    idx = configs.get('cam_postura_index', config.CAM_POSTURA_INDEX)
+
+    logger.info(f"Cámara: index={idx}")
     logger.info(f"Resolución: {config.POSTURA_RESOLUTION}")
     logger.info(f"FPS target: ~{1/config.POSTURA_FPS_DELAY:.0f} FPS")
     logger.info(f"Umbrales: espalda={config.MAX_BACK_INCLINATION}°, cuello={config.MAX_NECK_FLEXION}°")
 
-    db.init_db()
     worker = WorkerPostura()
     worker.inicializar_camara()
     worker.run_loop()

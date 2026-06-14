@@ -103,6 +103,35 @@ st.markdown('<div class="main-header">🏭 VISION-MVP · Monitor de Producción<
 
 
 # =============================================
+# Sidebar: Configuración de Cámaras
+# =============================================
+with st.sidebar:
+    st.header("⚙️ Configuración")
+    st.markdown("Ajusta los puertos USB de las cámaras.")
+    
+    config_actual = db.obtener_config_camaras()
+    
+    with st.form("form_config_camaras"):
+        idx_bandejas = st.number_input(
+            "Cámara de Bandejas (Index)", 
+            min_value=0, max_value=10, 
+            value=config_actual['cam_bandejas_index'],
+            step=1
+        )
+        idx_postura = st.number_input(
+            "Cámara de Postura (Index)", 
+            min_value=0, max_value=10, 
+            value=config_actual['cam_postura_index'],
+            step=1
+        )
+        
+        submit = st.form_submit_button("Guardar Configuración")
+        if submit:
+            db.actualizar_config_camaras(idx_bandejas, idx_postura)
+            st.success("¡Configuración guardada!")
+            st.warning("⚠️ Debes reiniciar los workers (start_vision_mvp.bat) para aplicar los cambios.")
+
+# =============================================
 # Estado del Sistema (Workers)
 # =============================================
 workers = db.obtener_estado_workers()

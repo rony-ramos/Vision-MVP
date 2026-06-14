@@ -50,7 +50,25 @@ def init_db() -> None:
                 last_heartbeat  TEXT NOT NULL,
                 status          TEXT NOT NULL DEFAULT 'activo'
             );
+
+            CREATE TABLE IF NOT EXISTS configuracion (
+                clave TEXT PRIMARY KEY,
+                valor TEXT NOT NULL
+            );
+
+            -- Valores por defecto basados en config.py si no existen
+            INSERT OR IGNORE INTO configuracion (clave, valor) VALUES ('cam_bandejas_index', '?');
+            INSERT OR IGNORE INTO configuracion (clave, valor) VALUES ('cam_postura_index', '?');
         """)
+        # Reemplazamos los parámetros de INSERT OR IGNORE
+        conn.execute(
+            "UPDATE configuracion SET valor = ? WHERE clave = 'cam_bandejas_index' AND valor = '?'",
+            (str(config.CAM_BANDEJAS_INDEX),)
+        )
+        conn.execute(
+            "UPDATE configuracion SET valor = ? WHERE clave = 'cam_postura_index' AND valor = '?'",
+            (str(config.CAM_POSTURA_INDEX),)
+        )
         conn.commit()
     finally:
         conn.close()
@@ -210,5 +228,48 @@ def obtener_estado_workers() -> list:
             "SELECT worker_name, last_heartbeat, status FROM estado_sistema"
         )
         return [dict(row) for row in cursor.fetchall()]
+    finally:
+        conn.close()
+
+
+def obtener_config_camaras() -> dict:
+    """
+    Obtiene los índices de las cámaras desde la base de datos.
+    Returns: dict con 'cam_bandejas_index' y 'cam_postura_index' (enteros).
+    """
+    conn = get_connection()
+    try:
+        cursor = conn.execute(
+            "SELECT clave, valor FROM configuracion WHERE clave IN ('cam_bandejas_index', 'cam_postura_index')"
+        )
+        filas = cursor.fetchall()
+        # Valores por defecto en caso de algún error extraño
+        configs = {
+            'cam_bandejas_index': config.CAM_BANDEJAS_INDEX,
+            'cam_postura_index': config.CAM_POSTURA_INDEX
+        }
+        for row in filas:
+            try:
+                configs[row['clave']] = int(row['valor'])
+            except ValueError:
+                pass
+        return configs
+    finally:
+        conn.close()
+
+
+def actualizar_config_camaras(idx_bandejas: int, idx_postura: int) -> None:
+    """Actualiza los índices de las cámaras en la base de datos."""
+    conn = get_connection()
+    try:
+        conn.execute(
+            "UPDATE configuracion SET valor = ? WHERE clave = 'cam_bandejas_index'",
+            (str(idx_bandejas),)
+        )
+        conn.execute(
+            "UPDATE configuracion SET valor = ? WHERE clave = 'cam_postura_index'",
+            (str(idx_postura),)
+        )
+        conn.commit()
     finally:
         conn.close()
