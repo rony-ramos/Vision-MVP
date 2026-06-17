@@ -120,7 +120,7 @@ def evaluar_geometria(contorno: np.ndarray) -> dict:
     }
 
 
-def dibujar_overlay(frame: np.ndarray, yolo_box: tuple, resultado: dict, contorno: np.ndarray, debug_info: str = None) -> np.ndarray:
+def dibujar_overlay(frame: np.ndarray, yolo_box: tuple, resultado: dict, contorno: np.ndarray, debug_info: str = None, roi_offset: tuple = None) -> np.ndarray:
     """Dibuja la detección de YOLO y la matemática geométrica."""
     if yolo_box is None:
         cv2.putText(frame, "BUSCANDO BANDEJA...", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 165, 255), 2)
@@ -129,12 +129,14 @@ def dibujar_overlay(frame: np.ndarray, yolo_box: tuple, resultado: dict, contorn
         return frame
 
     x1, y1, x2, y2 = yolo_box
+    ox, oy = roi_offset if roi_offset else (x1, y1)
+    
     es_ok = resultado['resultado'] == 'OK'
     color = (0, 200, 0) if es_ok else (0, 0, 255)
 
     # 1. Dibujar la "Búsqueda" (Caja YOLO) en Naranja
-    cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 144, 30), 2)
-    cv2.putText(frame, "YOLO Vision", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 144, 30), 1)
+    # cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 144, 30), 2)
+    # cv2.putText(frame, "YOLO Vision", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 144, 30), 1)
 
     # Info de Debug
     if config.DEBUG_MODE and debug_info:
@@ -142,17 +144,16 @@ def dibujar_overlay(frame: np.ndarray, yolo_box: tuple, resultado: dict, contorn
 
     # 2. Dibujar la "Medición" (Geometría)
     if contorno is not None and resultado.get('rect'):
-        # Offset al contorno para dibujarlo en el frame original
+        # Offset al contorno para dibujarlo en el frame original usando el roi_offset
         contorno_offset = contorno.copy()
-        contorno_offset[:, :, 0] += x1
-        contorno_offset[:, :, 1] += y1
+        contorno_offset[:, :, 0] += ox
+        contorno_offset[:, :, 1] += oy
         cv2.drawContours(frame, [contorno_offset], -1, (255, 255, 255), 1)
 
         # Dibujar la caja rotada (minAreaRect)
         rect = resultado['rect']
-        # El rect está referenciado a la sub-imagen (ROI). Necesitamos sumarle el offset (x1, y1) al centro
         centro_x, centro_y = rect[0]
-        rect_ajustado = ((centro_x + x1, centro_y + y1), rect[1], rect[2])
+        rect_ajustado = ((centro_x + ox, centro_y + oy), rect[1], rect[2])
         
         box = cv2.boxPoints(rect_ajustado)
         box = np.intp(box)
@@ -239,6 +240,7 @@ class WorkerBandejas:
             results = self.yolo_model.predict(frame, classes=clases_busqueda, conf=0.15, verbose=False)
         
         yolo_box = None
+        roi_offset = None
         contorno = None
         area = 0
         resultado = {
@@ -272,7 +274,16 @@ class WorkerBandejas:
             x2, y2 = min(w_f, x2), min(h_f, y2)
             yolo_box = (x1, y1, x2, y2)
             
-            roi = frame[y1:y2, x1:x2]
+            # Ampliar la ROI un poco para que el objeto no toque los bordes de la imagen
+            # y el algoritmo de contornos no traze la frontera perfecta de 0 grados.
+            padding = 15
+            px1 = max(0, x1 - padding)
+            py1 = max(0, y1 - padding)
+            px2 = min(w_f, x2 + padding)
+            py2 = min(h_f, y2 + padding)
+            
+            roi_offset = (px1, py1)
+            roi = frame[py1:py2, px1:px2]
             
             if roi.shape[0] > 10 and roi.shape[1] > 10:
                 # ETAPA 2: Medición con Geometría (OpenCV)
@@ -291,7 +302,7 @@ class WorkerBandejas:
         if self.frame_count % self.heartbeat_interval == 0:
             db.actualizar_heartbeat("worker_bandejas")
 
-        frame_con_overlay = dibujar_overlay(frame_con_overlay, yolo_box, resultado, contorno, debug_info)
+        frame_con_overlay = dibujar_overlay(frame_con_overlay, yolo_box, resultado, contorno, debug_info, roi_offset)
         self.streamer.set_frame(frame_con_overlay)
 
         if config.DEBUG_MODE:
