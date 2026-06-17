@@ -211,9 +211,9 @@ class WorkerBandejas:
         if config.DEBUG_MODE:
             # En modo debug buscamos la clase principal y otras rectangulares de prueba
             # 63: laptop, 67: cell phone, 73: book, 68: microwave, 66: keyboard
-            clases_busqueda = [config.BANDEJA_YOLO_CLASS, 63, 67, 73, 68, 66]
+            clases_busqueda = [config.BANDEJA_YOLO_CLASS, 67, 73, 68]
         else:
-            clases_busqueda = [config.BANDEJA_YOLO_CLASS]
+            clases_busqueda =  [config.BANDEJA_YOLO_CLASS, 67, 73, 68]
 
         # Filtramos por la(s) clase(s) proxy (bajamos la confianza a 0.15 para objetos difíciles)
         results = self.yolo_model.predict(frame, classes=clases_busqueda, conf=0.15, verbose=False)
