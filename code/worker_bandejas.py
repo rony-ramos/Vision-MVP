@@ -226,7 +226,8 @@ class WorkerBandejas:
                 67,  # cell phone
                 73,  # book
                 68,  # microwave
-                62   # tv
+                62,  # tv
+                63   # laptop
             ]
             # Filtramos por la(s) clase(s) proxy (bajamos la confianza a 0.15 para objetos difíciles)
             results = self.yolo_model.predict(frame, classes=clases_busqueda, conf=0.15, verbose=False)
