@@ -30,7 +30,7 @@ BANDEJA_MAX_ANGLE_TOLERANCE = 5.0 # Grados de tolerancia máxima de rectitud
 # =============================================
 # General
 # =============================================
-DEBUG_MODE = False          # Si es True, usa cv2.imshow nativo (no recomendado para dashboard)
+DEBUG_MODE = True          # Si es True, usa cv2.imshow nativo (no recomendado para dashboard)
 
 # =============================================
 # Streaming de Video (MJPEG)

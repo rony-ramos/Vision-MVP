@@ -209,14 +209,12 @@ class WorkerBandejas:
         
         # ETAPA 1: Búsqueda con IA (YOLO)
         if config.DEBUG_MODE:
-            # En modo debug buscamos la clase principal y otras rectangulares de prueba
-            # 63: laptop, 67: cell phone, 73: book, 68: microwave, 66: keyboard
-            clases_busqueda = [config.BANDEJA_YOLO_CLASS, 67, 73, 68]
+            # En modo debug no filtramos por clases (sin limitaciones)
+            results = self.yolo_model.predict(frame, conf=0.15, verbose=False)
         else:
-            clases_busqueda =  [config.BANDEJA_YOLO_CLASS, 67, 73, 68]
-
-        # Filtramos por la(s) clase(s) proxy (bajamos la confianza a 0.15 para objetos difíciles)
-        results = self.yolo_model.predict(frame, classes=clases_busqueda, conf=0.15, verbose=False)
+            clases_busqueda = [config.BANDEJA_YOLO_CLASS, 67, 73, 68]
+            # Filtramos por la(s) clase(s) proxy (bajamos la confianza a 0.15 para objetos difíciles)
+            results = self.yolo_model.predict(frame, classes=clases_busqueda, conf=0.15, verbose=False)
         
         yolo_box = None
         contorno = None
@@ -229,11 +227,6 @@ class WorkerBandejas:
         debug_info = None
 
         if len(results) > 0 and len(results[0].boxes) > 0:
-            # Tomamos la detección con mayor confianza
-            box_obj = results[0].boxes[0]
-            box = box_obj.xyxy[0].cpu().numpy().astype(int)
-            x1, y1, x2, y2 = box
-            
             if config.DEBUG_MODE:
                 todas_detecciones = []
                 for b in results[0].boxes:
@@ -244,6 +237,12 @@ class WorkerBandejas:
                 
                 # Unimos todas las detecciones separadas por comas
                 debug_info = "Detectado: " + " | ".join(todas_detecciones)
+                print(f"[DEBUG YOLO] {debug_info}")
+
+            # Tomamos la detección con mayor confianza
+            box_obj = results[0].boxes[0]
+            box = box_obj.xyxy[0].cpu().numpy().astype(int)
+            x1, y1, x2, y2 = box
             
             # Asegurar límites dentro del frame
             h_f, w_f = frame.shape[:2]
