@@ -46,6 +46,9 @@ STREAM_PORT_POSTURA = 8002
 # Ajustar según la posición física de la cámara.
 BANDEJA_ROI = (100, 80, 440, 340)
 
+# Limitador térmico y de FPS (Aprox. 2-3 FPS por defecto)
+BANDEJA_FPS_DELAY = 0.05
+
 # Umbrales de contorno para detección de bandeja
 MIN_CONTOUR_AREA = 5000         # Área mínima para considerar un contorno como bandeja
 MAX_CONTOUR_AREA = 200000       # Área máxima (filtrar ruido grande)

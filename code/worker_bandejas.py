@@ -305,8 +305,8 @@ class WorkerBandejas:
                 if not self.procesar_frame(frame):
                     break
                 
-                # LIMITADOR TÉRMICO OBLIGATORIO (Aprox. 2-3 FPS)
-                time.sleep(0.3) 
+                # LIMITADOR TÉRMICO OBLIGATORIO
+                time.sleep(config.BANDEJA_FPS_DELAY) 
         except KeyboardInterrupt:
             logger.info("Worker detenido")
         except Exception as e:
