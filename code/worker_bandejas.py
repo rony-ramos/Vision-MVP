@@ -16,9 +16,11 @@ import numpy as np
 
 try:
     from ultralytics import YOLO
+    import torch
 except ImportError:
     YOLO = None
-    print("CRÍTICO: Librería 'ultralytics' no instalada. Ejecuta 'pip install ultralytics'")
+    torch = None
+    print("CRÍTICO: Librería 'ultralytics' o 'torch' no instalada. Ejecuta 'pip install ultralytics'")
 
 import config
 import db
@@ -167,11 +169,18 @@ class WorkerBandejas:
         self.streamer = VideoStreamingServer(config.STREAM_PORT_BANDEJAS)
         
         # Cargar modelo YOLO
-        if YOLO is None:
-            logger.error("No se puede iniciar el worker sin ultralytics.")
+        if YOLO is None or torch is None:
+            logger.error("No se puede iniciar el worker sin ultralytics/torch.")
             sys.exit(1)
+            
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        logger.info(f"Dispositivo de IA detectado: {device.upper()}")
+        if device == 'cuda':
+            logger.info(f"GPU detectada: {torch.cuda.get_device_name(0)}")
+            
         logger.info(f"Cargando modelo YOLO: {config.BANDEJA_YOLO_MODEL}")
         self.yolo_model = YOLO(config.BANDEJA_YOLO_MODEL)
+        self.yolo_model.to(device)
 
     def inicializar_camara(self):
         configs = db.obtener_config_sistema()
@@ -212,7 +221,13 @@ class WorkerBandejas:
             # En modo debug no filtramos por clases (sin limitaciones)
             results = self.yolo_model.predict(frame, conf=0.15, verbose=False)
         else:
-            clases_busqueda = [config.BANDEJA_YOLO_CLASS, 67, 73, 68]
+            clases_busqueda = [
+                config.BANDEJA_YOLO_CLASS,
+                67,  # cell phone
+                73,  # book
+                68,  # microwave
+                62   # tv
+            ]
             # Filtramos por la(s) clase(s) proxy (bajamos la confianza a 0.15 para objetos difíciles)
             results = self.yolo_model.predict(frame, classes=clases_busqueda, conf=0.15, verbose=False)
         
