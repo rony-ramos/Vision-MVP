@@ -40,38 +40,44 @@ logger = logging.getLogger(__name__)
 
 def preprocesar_y_detectar_contorno(roi: np.ndarray) -> tuple:
     """
-    Aplica thresholding sobre el recorte de YOLO para encontrar el contorno matemático exacto.
+    Aplica procesamiento sobre el recorte de YOLO para encontrar el contorno matemático exacto.
+    Usa Canny y Convex Hull para mitigar el efecto de sombras internas.
     """
     gris = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
     
-    # Evitar crash si el recorte es más pequeño que el kernel del Threshold
     h_roi, w_roi = gris.shape
-    if h_roi <= config.BANDEJA_THRESH_BLOCK_SIZE or w_roi <= config.BANDEJA_THRESH_BLOCK_SIZE:
+    if h_roi <= 10 or w_roi <= 10:
         return None, 0
 
-    blur = cv2.GaussianBlur(gris, config.BANDEJA_BLUR_KERNEL, 0)
-    thresh = cv2.adaptiveThreshold(
-        blur, 255,
-        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY_INV,
-        config.BANDEJA_THRESH_BLOCK_SIZE,
-        config.BANDEJA_THRESH_C
-    )
-
-    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    # 1. Desenfoque fuerte para suavizar texturas del cartón y sombras
+    blur = cv2.GaussianBlur(gris, (11, 11), 0)
+    
+    # 2. Detección de bordes Canny (menos sensible a gradientes de sombras que el adaptiveThreshold)
+    edges = cv2.Canny(blur, 20, 80)
+    
+    # 3. Clausura morfológica robusta para unir bordes desconectados
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))
+    bordes_cerrados = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel, iterations=2)
+    
+    contours, _ = cv2.findContours(bordes_cerrados, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     if not contours:
         return None, 0
 
-    # Nos quedamos con el contorno más grande dentro de la caja de YOLO
+    # 4. Nos quedamos con el contorno más grande
     mejor = max(contours, key=cv2.contourArea)
-    area = cv2.contourArea(mejor)
+    
+    # 5. CONVEX HULL: Actúa como una liga elástica alrededor de los puntos.
+    # Esto elimina las "mordidas" hacia adentro que causan las sombras.
+    hull = cv2.convexHull(mejor)
+    
+    area = cv2.contourArea(hull)
     
     # Filtro básico de ruido
     if area < 500:
         return None, 0
         
-    return mejor, area
+    return hull, area
 
 
 def evaluar_geometria(contorno: np.ndarray) -> dict:
