@@ -23,9 +23,10 @@ CAM_POSTURA_INDEX = 1       # Cámara para monitoreo ergonómico
 # =============================================
 # Configuración YOLO
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-BANDEJA_YOLO_MODEL = os.path.join(BASE_DIR, 'assets', 'yolov8x.pt')
-BANDEJA_YOLO_CLASS = 45 # 45 es 'bowl' en COCO (Proxy para la bandeja real detectada en p1.jpeg)
-BANDEJA_MAX_ANGLE_TOLERANCE = 5.0 # Grados de tolerancia máxima de rectitud
+BANDEJA_YOLO_MODEL = os.path.join(BASE_DIR, "assets", "yolov8s-worldv2.pt")
+BANDEJA_YOLO_PROMPTS = ["box", "cardboard box", "open box", "tray", "container"]
+BANDEJA_YOLO_CONFIDENCE = 0.05 # Umbral bajo típico para zero-shot text-image
+BANDEJA_MAX_ANGLE_TOLERANCE = 10.0 # Grados de tolerancia máxima de rectitud
 
 # =============================================
 # General

@@ -217,4 +217,6 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 vision_mvp.db
-code/assets/yolov8x.pt
+code/assets/*.pt
+weights/clip/*.pt
+code/weights/clip/*.pt
