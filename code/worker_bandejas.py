@@ -261,9 +261,9 @@ class WorkerBandejas:
             x2, y2 = min(w_f, x2), min(h_f, y2)
             yolo_box = (x1, y1, x2, y2)
             
-            area = (x2 - x1) * (y2 - y1)
+            area = float((x2 - x1) * (y2 - y1))
             
-            # Ampliar la ROI un poco para que el objeto no toque los bordes de la imagen
+            # Recortar el ROI para procesar geometría que el objeto no toque los bordes de la imagen
             # y el algoritmo de Hough pueda encontrar todas las líneas bien
             padding = 15
             px1 = max(0, x1 - padding)

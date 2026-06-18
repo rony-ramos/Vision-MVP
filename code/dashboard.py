@@ -285,15 +285,21 @@ with col_calidad:
         # Formatear para display
         display_data = []
         for e in eventos_calidad:
+            val = e['valor_numerico']
+            try:
+                val_str = f"{float(val):.0f}" if val is not None else '-'
+            except (ValueError, TypeError):
+                val_str = "Error_DB"
+                
             display_data.append({
                 'Hora': e['timestamp'].split(' ')[-1] if ' ' in (e['timestamp'] or '') else e['timestamp'],
                 'Resultado': '✅ OK' if e['resultado'] == 'OK' else '❌ DEFECTO',
-                'Área (px²)': f"{e['valor_numerico']:.0f}" if e['valor_numerico'] else '-',
+                'Área (px²)': val_str,
                 'Detalle': e['detalle'] or '-'
             })
         st.dataframe(
             display_data,
-            use_container_width=True,
+            width='stretch',
             hide_index=True,
             height=400
         )
@@ -314,16 +320,24 @@ with col_postura:
     if eventos_postura:
         display_data = []
         for e in eventos_postura:
+            v1 = e['valor_numerico']
+            v2 = e['valor_numerico2']
+            try:
+                s_v1 = f"{float(v1):.1f}" if v1 is not None else '-'
+                s_v2 = f"{float(v2):.1f}" if v2 is not None else '-'
+            except (ValueError, TypeError):
+                s_v1, s_v2 = "Error", "Error"
+
             display_data.append({
                 'Hora': e['timestamp'].split(' ')[-1] if ' ' in (e['timestamp'] or '') else e['timestamp'],
                 'Estado': '⚠️ ALERTA' if e['resultado'] == 'ALERTA' else '✅ OK',
-                'Espalda (°)': f"{e['valor_numerico']:.1f}" if e['valor_numerico'] else '-',
-                'Cuello (°)': f"{e['valor_numerico2']:.1f}" if e['valor_numerico2'] else '-',
+                'Espalda (°)': s_v1,
+                'Cuello (°)': s_v2,
                 'Detalle': e['detalle'] or '-'
             })
         st.dataframe(
             display_data,
-            use_container_width=True,
+            width='stretch',
             hide_index=True,
             height=400
         )
